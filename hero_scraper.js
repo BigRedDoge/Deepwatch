@@ -1,5 +1,6 @@
 var fs = require('fs');
 var https = require('https');
+var http = require('http');
 var jsdom = require("jsdom");
 var { JSDOM } = jsdom;
 var $ = require('jquery')(require('jsdom-no-contextify').jsdom().parentWindow);
@@ -25,67 +26,88 @@ function getDOM(res) {
  */
 function downloadImage(url, filename, ext, dir) {
     var file = fs.createWriteStream(dir + filename + "." + ext);
-    var req = https.get(url, function(res) {
-        res.pipe(file)
-    });
+    try {
+        if (url.slice(0, 5) === 'https') {
+            var req = https.get(url, function(res) {
+                res.pipe(file);
+            });
+        } else {
+            var req = http.get(url, function(res) {
+                res.pipe(file);
+            });
+        }
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 async function googleImages(allImages) {
-    const browser = await puppeteer.launch({headless: true});
+    const browser = await puppeteer.launch({headless: false});
     const page = await browser.newPage();
     var url = 'https://www.google.com/search?q=' + HERO + '&tbm=isch';
-    var pagesToLoad = 3;
+    var pagesToLoad = 0;
 
     await page.goto(url);
 
-    async function load() {
-        for (var i = 0; i < pagesToLoad; i++) {
-            await page.evaluate((i) => {
+    async function load(pageLoaded, HERO) {
+        //console.log(pageLoaded)
+         //for (var i = 0; i < pagesToLoad; i++) {
+            await page.evaluate((pageLoaded, HERO) => {
                 var imgElements = document.getElementsByTagName('img');
                 var valid = [];
+                console.log(imgElements.length);
                 for (e of imgElements) {
-                    if (e.dataset) {
+                    if (e.dataset && ((e.dataset.iurl || e.dataset.src) && e.alt === 'Image result for ' + HERO)) {
                         valid.push(e);
+                        if (pageLoaded === 0) {
+                            e.click();
+                        }
                     }
                 }
-                var last = document.getElementsByTagName('img')[valid.length - 1].id = "lastClass" + i;
-                document.getElementById("lastClass" + i).scrollIntoView();
-            }, i);
-            if (i < pagesToLoad - 1) {
-                await page.waitFor(3000);
+                if (valid.length > 0) {
+                    valid[valid.length - 1].id = "lastClass" + pageLoaded;
+                    document.getElementById("lastClass" + pageLoaded).click();
+                    document.getElementById("lastClass" + pageLoaded).scrollIntoView();
+                }
+            }, pageLoaded, HERO);
+
+            await page.waitFor(3000);
+            if (pageLoaded > 0) {
+                await load(pageLoaded - 1);
+            } else {
+                return true;
             }
-        }
+        //}
     }
 
-    await load();
+    var images = await load(pagesToLoad, HERO).then(async() => {
+        var find = await page.evaluate((HERO) => {
+            var imgElements = document.getElementsByTagName('img');
+            var imgCount = 0;
+            var imgUrls = [];
+            for (element in imgElements) {
+                var e = imgElements[element];
+                var imgUrl;
+                if (e.alt === 'Image result for ' + HERO) {
+                    imgUrl = e.parentElement.parentElement.getAttribute('href');
+                }
     
-    var images = await page.evaluate(() => {
-        var imgElements = document.getElementsByTagName('img');
-        var imgCount = 0;
-        var imgUrls = [];
-        for (element in imgElements) {
-            var e = imgElements[element];
-            var imgUrl;
-            if (e.dataset) {
-                if (e.dataset.iurl) {
-                    imgUrl = e.dataset.iurl;
-                } else if (e.dataset.src) {
-                    imgUrl = e.dataset.src;
-                } 
-            }
-            
-            if (imgUrl) {
-                if (!imgUrls.includes(imgUrl)) {
-                    imgUrls.push(imgUrl);
-                    imgCount++;
+                if (imgUrl) {
+                    if (!imgUrls.includes(imgUrl)) {
+                        imgUrl = decodeURIComponent(imgUrl.slice(15, imgUrl.search("&imgrefurl")));
+                        imgUrls.push(imgUrl);
+                        imgCount++;
+                    }
                 }
             }
-        }
-        console.log("Retrieved " + imgCount + " images");
-        console.log(imgUrls);
-        return imgUrls;
+            console.log("Retrieved " + imgCount + " images");
+            console.log(imgUrls);
+            return imgUrls;
+        }, HERO);
+        
+        return find;
     });
-    
+
     await browser.close();
     return images;
 }
@@ -93,7 +115,7 @@ async function googleImages(allImages) {
 googleImages().then((images) => {
     for (i in images) {
         // Saves as HERO<image number>.<file extension>
-        downloadImage(images[i], HERO + i, '.png', HERO_PATH);
+        downloadImage(images[i], HERO + i, 'png', HERO_PATH);
     }
 });
 
