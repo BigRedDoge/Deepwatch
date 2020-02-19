@@ -89,9 +89,9 @@ def main(_argv):
 
         if FLAGS.output:
             out.write(frame)
-
+ 
         cv2.imshow("output", frame)
-
+ 
         if cv2.waitKey(1) == ord('q'):
             break
 

@@ -38,7 +38,7 @@ canny = cv2.Canny(gray, 120, 180, 1)
 kernel = np.ones((1,1),np.uint8)
 dilate = cv2.dilate(mask1, kernel, iterations=1)
 
-# Find contours
+# Find contours 
 cnts = cv2.findContours(mask1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 cnts = cnts[0] if len(cnts) == 2 else cnts[1]
 
