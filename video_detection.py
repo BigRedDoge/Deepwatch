@@ -28,7 +28,7 @@ flags.DEFINE_string('output_format', 'XVID', 'codec used in VideoWriter when sav
 flags.DEFINE_integer('num_classes', 80, 'number of classes in the model')
 
 URL = "http://129.21.65.167:7777/shot.jpg"
- 
+
 def main(_argv):
     physical_devices = tf.config.experimental.list_physical_devices('GPU')
     if len(physical_devices) > 0:
