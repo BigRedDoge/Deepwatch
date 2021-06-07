@@ -1,0 +1,3 @@
+[submodule "Deepwatch/yolov5"]
+	path = Deepwatch/yolov5
+	url = https://github.com/ultralytics/yolov5.git
