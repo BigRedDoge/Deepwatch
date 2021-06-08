@@ -146,7 +146,7 @@ class DeepwatchEnv(gym.Env):
         #    pywinauto.keyboard.send_keys('{SPACE}')
         #    reward -= 1     
 
-        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE | win32con.MOUSEEVENTF_ABSOLUTE, x - mouse_x, y) # - mouse_y)
+        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, int(mouse_x * 0.33), 0, 0, 0) # - mouse_y) # | win32con.MOUSEEVENTF_ABSOLUTE,
         #self.app.Overwatch.move_mouse((x - mouse_x, y - mouse_y))   
         
         self.frame = self.get_screen() 
@@ -192,8 +192,8 @@ class DeepwatchEnv(gym.Env):
             self.detect_mem.append(0)
             repeat_penalty = lambda x: x * 2
             reward -= repeat_penalty(len(self.detect_mem) + 1)
-            if mouse_left >= 0:
-                reward -= 1
+            #if mouse_left >= 0:
+            #    reward -= 1
 
         if self.shots_hit >= 100:
             done = True
@@ -211,7 +211,8 @@ class DeepwatchEnv(gym.Env):
 
         return screen, reward, done, {}
 
-    def reset(self):        
+    def reset(self): 
+        """       
         if not self.start_run:
             pywinauto.keyboard.send_keys('{ESC}')
             self.app.Overwatch.move_mouse_input((1280, 800)) 
@@ -232,7 +233,7 @@ class DeepwatchEnv(gym.Env):
             self.app.Overwatch.click()
             time.sleep(0.25)
             pywinauto.keyboard.send_keys('{f down}' '{f down}')
-              
+        """
         self.frame = self.get_screen()
         screen = self.resize(self.frame)
         screen = screen.astype(np.uint8)
@@ -271,11 +272,10 @@ class DeepwatchEnv(gym.Env):
     
     def classification(self):
         im = self.resize(self.frame, (self.yolo_size, self.yolo_size))
-        #im = self.frame
         cv2.imwrite('frame.png', im)
         dataset = LoadImages('frame.png', img_size=self.yolo_size)
         #img = torch.zeros((1, 3, self.imsize, self.imsize), device=self.device)
-        #_ = self.model(img.half(), augment=False)
+        #=_ = self.model(img.half(), augment=False)
         detections = []
         for path, img, im0s, _ in dataset:
             img = torch.from_numpy(img).to(self.device)

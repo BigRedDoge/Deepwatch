@@ -8,7 +8,7 @@ from stable_baselines3.common.policies import ActorCriticPolicy, ActorCriticCnnP
 from scipy.stats import loguniform
 
 class CustomCNN(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Box, features_dim: int = 256):
+    def __init__(self, observation_space: gym.spaces.Box, features_dim: int = 128):
         super(CustomCNN, self).__init__(observation_space, features_dim)
         # We assume CxHxW images (channels first)
         # Re-ordering will be done by pre-preprocessing or wrapper
@@ -40,15 +40,15 @@ class CustomCNN(BaseFeaturesExtractor):
             nn.ReLU(),
 
             nn.Conv2d(32, 64, kernel_size=4),#, stride=2),
-            #nn.MaxPool2d(2, 2),
+            nn.MaxPool2d(2, 2),
             nn.ReLU(),
 
             nn.Conv2d(64, 128, kernel_size=4),
-            #nn.MaxPool2d(2, 2),
+            nn.MaxPool2d(2, 2),
             nn.ReLU(),
 
             nn.Conv2d(128, 256, kernel_size=3),
-            #nn.MaxPool2d(2, 2),
+            nn.MaxPool2d(2, 2),
             nn.ReLU(),
             nn.Flatten()
         )
@@ -83,12 +83,6 @@ class CustomValuePolicyNetwork(nn.Module):
 
         # Policy network
         self.policy_net = nn.Sequential(
-            nn.Linear(512, 256),
-            nn.ReLU(),
-
-            nn.Linear(256, 128),
-            nn.ReLU(),
-
             nn.Linear(128, 128),
             nn.ReLU(),
 
@@ -101,12 +95,6 @@ class CustomValuePolicyNetwork(nn.Module):
 
         # Value network
         self.value_net = nn.Sequential(
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            
-            nn.Linear(256, 128),
-            nn.ReLU(),
-
             nn.Linear(128, 128),
             nn.ReLU(),
 

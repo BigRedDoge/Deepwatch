@@ -13,8 +13,10 @@ from gym.utils import seeding
 from PIL import Image
 from pynput.keyboard import Controller, Key
 import mouse
-import autoit
+#import autoit
 from pywinauto.application import Application
+import pywinauto
+import pyautogui
 
 sys.path.insert(1, r'C:\Users\Sean\Desktop\Tradebot\Deepwatch\yolov5')
 import math
@@ -31,11 +33,11 @@ from utils.general import (apply_classifier, check_img_size,
 from utils.torch_utils import load_classifier, select_device, time_synchronized
 
 
-class DeepwatchEnv(gym.Env):
+class DeepwatchEnv2(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
-        super(DeepwatchEnv, self).__init__() 
+        super(DeepwatchEnv2, self).__init__() 
         
         self.input_width = 2560
         self.input_height = 1440
@@ -52,6 +54,9 @@ class DeepwatchEnv(gym.Env):
         self.prev_detections = []
         self.skip_frame = False
 
+        self.consec_shots = 0
+        self.consec_miss = 0
+
         self.device = torch.device("cuda:0")
         weights = r'c:\Users\Sean\Desktop\Tradebot\Deepwatch\yolov5\runs\exp41\weights\best.pt'
         self.model = attempt_load(weights, map_location=self.device)                                          
@@ -66,175 +71,89 @@ class DeepwatchEnv(gym.Env):
         #self.action_space = spaces.MultiDiscrete([4, 2560, 1440])
         #self.action_space = spaces.MultiDiscrete([5, 3, 3])
         #self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype="float32")
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(12,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(7,), dtype=np.float32)
         #self.action_space = spaces.MultiDiscrete([200, 200, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
         #self.observation_space = Tuple((spaces.Box(low=0, high=1, shape=(self.imsize, self.imsize, 3), dtype=np.uint8), spaces.Box(low=0, high=1, shape=(                                                                                                                      2, 6, 2), dtype=np.float32)))
-        self.observation_space = spaces.Tuple([spaces.Box(low=0, high=255, shape=(self.imsize, self.imsize, 3), dtype=np.uint8), \
-            spaces.Box(low=0, high=1, shape=(2,6,2,), dtype=np.uint8)])
-        #self.observation_space = spaces.Box(low=-self.screen_width / 2, high=self.screen_width / 2, shape=(6, 2), dtype=np.uint8)
-                
+        #self.observation_space = spaces.Tuple([spaces.Box(low=0, high=255, shape=(self.imsize, self.imsize, 3), dtype=np.uint8), \
+        #    spaces.Box(low=0, high=1, shape=(2,6,2,), dtype=np.uint8)])
+        #self.observation_space = spaces.Box(low=-self.screen_width / 2, high=self.screen_width / 2, shape=(2, 6, 2), dtype=np.uint8)
+        self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(2, 6, 4), dtype=np.float32)
+        self.move_btn_memory = { "w": 0, "a": 0, "s": 0, "d": 0 } 
 
     def step(self, action):
-        #list_action = [int(x[1]) for x in action]
-        #print(action)
-        #print(action.shape)
-        self.frame = self.get_screen() 
-        screen = self.resize(self.frame)
-        
-        action = action.numpy()
-        #action[0] /= 100
-        #action[1] /= 100
-        action = np.round(action)
-        print(action)
-        mouse_x = int(action[0])
-        mouse_y = int(action[1])
-        mouse_left = action[2]
-        mouse_right = action[3]
-        w = action[4]
-        a = action[5]
-        s = action[6]
-        d = action[7]
-        e = action[8]
-        q = action[9]
-        shift = action[10]
-        space = action[11]
         reward = 0
+        mouse_x = int(action[0] * (self.input_width / 2))
+        mouse_y = int(action[1] * (self.input_height / 2))
+        mouse_left = action[2]
+        #mouse_right = action[3]
+        w = action[3]
+        a = action[4]
+        s = action[5]
+        d = action[6]
+        #e = action[8]
+        #q = action[9]
+        #shift = action[7]
+        #space = action[8]
+        
         done = False
-        keyboard = Controller()
+        
         x = int(self.input_width / 2)  
         y = int(self.input_height / 2)
 
-        #if action[2] == 1:
-            #print("fire")
-        #    fire = True
-        #x_focus = (action[1] - 50) * 5
-        #y_focus = (action[2] - 50) * 5
-        x_focus = 0
-        y_focus = 0
-        """
-        if action[1] == 1:
-            x_focus = 100
-        elif action[1] == 2:
-            x_focus = -100
-        if action[2] == 1:
-            y_focus = 100
-        elif action[2] == 2:
-            y_focus = -100
-        """
-        if action[0] == 1:
-            x_focus = 50
-        elif action[0] == 2:
-            x_focus = -50
+        if mouse_left >= 0:
+            self.app.Overwatch.click()
 
-        if action[1] == 1:
-            y_focus = 50
-        elif action[1] == 2:
-            y_focus = -50
+        #if mouse_right >= 0:
+            #self.app.Overwatch.right_click()
+            #reward -= 1
+        
+        if w >= 0:
+            pywinauto.keyboard.send_keys('{w down}')
+            self.move_btn_memory['w'] = 1
+            #reward += 3
+        elif self.move_btn_memory['w'] == 1:
+            pywinauto.keyboard.send_keys('{w up}')
+            self.move_btn_memory['w'] = 0
 
-        #x_focus = int(action[0] * 100)
-        #y_focus = int(action[2] * 100)
-
+        if a >= 0:
+            pywinauto.keyboard.send_keys('{a down}')
+            self.move_btn_memory['a'] = 1
+        elif self.move_btn_memory['a'] == 1:
+            self.move_btn_memory['a'] = 0
         
-        if self.y_screen_pos <= 2000 and self.y_screen_pos >= -2000:
-            self.y_screen_pos += y_focus
-            if self.y_screen_pos > 2000:
-                self.y_screen_pos = 2000
-            elif self.y_screen_pos < -2000:
-                self.y_screen_pos = -2000
-
-        if self.y_screen_pos > 1000 or self.y_screen_pos < -1000:
-            reward -= 10
-            pass
-        if self.y_screen_pos > 500 or self.y_screen_pos < -500:
-            reward -= 5
-            pass
-        
-        
-        
-        keyboard.release('w')
-        keyboard.release('a')
-        keyboard.release('s')
-        keyboard.release('d')
-                
-        if w == 1:
-            keyboard.press('w')
-            #reward += 10
+        if s >= 0:
+            pywinauto.keyboard.send_keys('{s down}')
+            self.move_btn_memory['s'] = 1
+            reward -= 1
+        elif self.move_btn_memory['s'] == 1:
+            pywinauto.keyboard.send_keys('{s up}')
+            self.move_btn_memory['s'] = 0
             
-        if a == 1:
-            keyboard.press('a')     
-            #reward += 5
+        if d >= 0:
+            pywinauto.keyboard.send_keys('{d down}')
+            self.move_btn_memory['d'] = 1
+        elif self.move_btn_memory['d'] == 1:
+            pywinauto.keyboard.send_keys('{d up}')
+            self.move_btn_memory['d'] = 0
         
-        if s == 1:
-            keyboard.press('s')
-            #reward += 5
-            
-        if d == 1:
-            keyboard.press('d')
-            #reward -= 5
+        #if e >= 0:
+        #    pywinauto.keyboard.send_keys('{e}')
         
-        if e == 1:
-            keyboard.press('e')
-            keyboard.release('e')
-            #reward += 5
-        
-        if q == 1:
-            keyboard.press('q')
-            keyboard.release('q')
+        #if q == 1:
+        #    pywinauto.keyboard.send_keys('q')
 
-        if shift == 1:
-            #keyboard.press('shift')
-            #keyboard.release('shift')
-            pass
+        #if shift >= 0:
+        #    pywinauto.keyboard.send_keys('{VK_SHIFT}')
+        #    reward -= 1
 
-        if space == 1:
-            #keyboard.press('space')
-            #keyboard.release('space')
-            pass
-        
-        if mouse_left == 1:
-            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, x, y, 0, 0)
-            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, x, y, 0, 0)
+        #if space >= 0:
+        #    pywinauto.keyboard.send_keys('{SPACE}')
+        #    reward -= 1     
 
-        if mouse_right == 1:
-            win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN, x, y, 0, 0)
-            win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP, x, y, 0, 0)
-
-
-        #x_diff = x - x_focus
-        #y_diff = y - y_focus
-
-        """
-        if x_focus < 1280:
-            reward += 100
-        else:
-            reward -= 10
-        if y_focus < 840 and y_focus > 600:
-            reward += 100
-        else:
-            reward -= 10
-        """
-        #if y_focus < 500 or y_focus > 1000:
-        #    reward -= 50
-        #win32api.mouse_event(win32con.MOUSEEVENTF_MOVE | win32con.MOUSEEVENTF_ABSOLUTE, x - mouse_x, y - mouse_y)
-        #mouse.move(100, 100)
-        #mouse_pos = autoit.mouse_get_pos()
-        #print(mouse_pos)
-        #autoit.mouse_move(1, 0)
-        self.app.Overwatch.move_mouse((x-mouse_x, y-mouse_y))
-       # print(app.Overwatch.print_control_identifiers())
-        
-        """
-        if not self.skip_frame:
-            classify = self.classification()
-            self.prev_detections = classify
-            self.skip_frame = True
-        else:
-            classify = self.prev_detections
-            self.skip_frame = False
-        """
+        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, int(mouse_x * 0.33), 0, 0, 0) # - mouse_y) # | win32con.MOUSEEVENTF_ABSOLUTE, 
         
         classify = self.classification()
-        obs = np.full((2,6,2), 0)
+        obs = np.full((2,6,4), 0)
         if classify:
             #print("Enemies in LOS")
             enemy = 0
@@ -242,29 +161,38 @@ class DeepwatchEnv(gym.Env):
             #closest = None
             #closest_dist = None
             for det in classify:
-                reward += 5
-                tl_x = det[0][0]
-                tl_y = det[0][1]
-                br_x = det[1][0]
-                br_y = det[1][1]
+                #print(det)
+                reward += 1
+                tl_x = det[0][0] / 0.01
+                tl_y = det[0][1] / 0.01
+                br_x = det[1][0] / 0.01
+                br_y = det[1][1] / 0.01
                 #cv2.rectangle(screen, (tl_x, tl_y), (br_x, br_y), (255, 0, 0), -1)
                 mid_x = int((tl_x + br_x) / 2)
                 mid_y = int(((tl_y + br_y) / 2) + 25)
-                try:
-                    if det[2] == 0:
-                        obs[enemy] = [mid_x, mid_y]
-                        enemy += 1
-                    elif det[2] == 1:
-                        obs[team] = [mid_x, mid_y]
-                        team += 1
-                except:
-                    continue
-                if x >= tl_x and x <= br_x and y >= tl_y and y <= br_y:
-                    reward += 50
-                    #done = True
-                    print("Enemy Spotted")
+                #try:
+                if det[2] == 0:
+                    obs[0][enemy] = [tl_x, tl_y, br_x, br_y] #[mid_x, mid_y]
+                    obs[0][enemy] = [(p - (self.screen_width / 2)) / self.screen_width for p in obs[0][enemy]]
+                    #print(obs)
+                    enemy += 1
+                elif det[2] == 1:
+                    #obs[team] = [mid_x, mid_y]
+                    obs[1][team] = [tl_x, tl_y, br_x, br_y] #[mid_x, mid_y]
+                    obs[1][team] = [(p - (self.screen_width / 2)) / self.screen_width for p in obs[1][team]]
+                    team += 1
+                #except:
+                #    print("error?")
+                #print("x:", x)
+                #print("tl_x:", tl_x)
+                #print("br_x:", br_x)
+                if x >= tl_x and x <= br_x:# and y >= tl_y and y <= br_y:
+                    self.consec_shots += 1
+                    self.consec_miss = 0
+                    reward += 10 * self.consec_shots
+                    #print("Enemy Spotted")
                     if mouse_left:
-                        reward += 150
+                        reward += 50 * self.consec_shots
                         
     
                 """
@@ -307,27 +235,19 @@ class DeepwatchEnv(gym.Env):
                 """
                 
         else:
-            reward -= 10
+            self.consec_miss = 1
+            reward -= 3 * self.consec_miss
+            self.consec_shots = 0
             if mouse_left:
-                reward -= 5
+                reward -= 2
         
         #cv2.imshow('frame', screen)
         #if cv2.waitKey(1): pass
-
+        #print(obs)
         self.step_count += 1
-
-        #obs = np.full((2, 6, 2,), 0)
-
-        #if self.step_count % 500 == 0:
-        #    done = True
-        #a = np.concatenate((self.get_screen(), obs), axis=None)
-
-        #self.render()
-        #print("Reward: {}".format   
-        # MAKE ONLY 1 SCREENSHOT PER FRAME!
-             
+        #print(reward)
         #screen = screen.astype(np.float32) 
-        return (screen, obs), reward, done, {}
+        return obs, reward, done, {}
         #return obs, reward, done, {}
 
     def reset(self):
@@ -338,9 +258,10 @@ class DeepwatchEnv(gym.Env):
         #screen = screen.astype(np.float32) 
         screen = self.resize(self.frame)
         #screen /= 255.0
-        obs = np.full((2,6,2), 0)
+        obs = np.full((2,6,4), 0)
         #obs = np.full((12,2), 0)
-        return (screen, obs)
+        #return (screen, obs)
+        return obs
         #return self.observation()
 
     def render(self, mode='human'):
@@ -349,6 +270,7 @@ class DeepwatchEnv(gym.Env):
         if cv2.waitKey(1): pass
 
     def get_screen(self, scale=100):
+        """
         with mss.mss() as sct:
             monitor = {"top": 0, "left": 0, "width": self.input_width, "height": self.input_height}
             screen = np.array(sct.grab(monitor))
@@ -359,18 +281,25 @@ class DeepwatchEnv(gym.Env):
             screen = screen[:,:,:3]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
             screen = np.array(screen)
         return screen
+        """
+        frame = pyautogui.screenshot()
+        frame = np.array(frame)
+        screen = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        return screen
 
-    def resize(self, screen, size=360):
-        screen = cv2.resize(screen, (size, size), interpolation=cv2.INTER_AREA)
+    def resize(self, screen, size=(256, 144)):
+        screen = cv2.resize(screen, size, interpolation=cv2.INTER_AREA)
         return screen
     
     def classification(self):
-        im = self.resize(self.frame, self.yolo_size)
+        self.frame = self.get_screen()
+        im = self.resize(self.frame)
         cv2.imwrite('frame.png', im)
         dataset = LoadImages('frame.png', img_size=self.yolo_size)
         #img = torch.zeros((1, 3, self.imsize, self.imsize), device=self.device)
         #_ = self.model(img.half(), augment=False)
         detections = []
+        
         for path, img, im0s, _ in dataset:
             img = torch.from_numpy(img).to(self.device)
             img = img.half()
@@ -390,7 +319,7 @@ class DeepwatchEnv(gym.Env):
                             c1, c2 = (int(xyxy[0] * (self.yolo_size / self.input_width)), int(xyxy[1] * (self.yolo_size / self.input_height))), \
                                 (int(xyxy[2] * (self.yolo_size / self.input_width)), int(xyxy[3] * (self.yolo_size / self.input_height)))
                             detections.append([c1, c2, int(cls)])
-
+        #print(detections)
         return detections
 
 
