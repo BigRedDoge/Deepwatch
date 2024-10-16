@@ -10,6 +10,7 @@ import multiprocessing
 from multiprocessing import shared_memory
 import time
 import math
+import cv2
 
 from movement import Movement
 from detections import Detections
@@ -28,7 +29,14 @@ class DeepwatchEnv(Env):
         #self.close()
         #TODO: create process for environment client
 
+        self.screen_height = 1440 // 10
+        self.screen_width = 2560 // 10
+
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=0, high=1, shape=(self.screen_height, self.screen_width, 1), dtype=np.uint8)
+
         self.already_shot = False
+        self.shots_hit = 0
 
     def setup_movement_server(self):
         """
@@ -92,11 +100,64 @@ class DeepwatchEnv(Env):
         #self.test()
 
     def step(self, action):
-        pass
+        reward = 0
 
-    def reset(self):
-        pass
+        detection_memory = shared_memory.SharedMemory(name='detections')
+        self.detections = np.ndarray((10, 5), dtype=np.float64, buffer=detection_memory.buf)
+        screenshot_memory = shared_memory.SharedMemory(name='screenshot')
+        self.screenshot = np.ndarray(self.screen_shape, dtype=self.screen_dtype, buffer=screenshot_memory.buf)
 
+        frame = self.fill_in_detections()
+        frame = cv2.resize(frame, (self.screen_width, self.screen_height))
+        non_black_mask = np.any(frame != [0, 0, 0], axis=-1)
+        frame[non_black_mask] = [1, 1, 1]
+        frame = frame[:, :, 0]
+
+        mouse_x = int(action[0] * 100)
+        mouse_y = int(action[1] * 100)
+        
+
+        shot = self.detect_shot()
+        if shot:
+            reward += 10
+            self.shots_hit += 1
+
+        if self.detections[0][1] != 0 and self.detections[0][2] != 0 and self.detections[0][3] != 0 and self.detections[0][4] != 0:
+            reward += 1
+        
+        half_size = 50 // 2
+        x1, y1 = max(0, 0 - half_size), max(0, 0 - half_size)
+        x2, y2 = min(self.screen_width, 0 + half_size), min(self.screen_height, 0 + half_size)
+        roi = np.any(frame[y1:y2, x1:x2])
+        if roi:
+            mouse_left = 1
+
+        detection_memory.close()
+        screenshot_memory.close()
+        
+        info = {'shots_hit': self.shots_hit,
+                'hit_shot': shot}
+        
+        self.movement({'movement': {'mouse_left': mouse_left, 'mouse_right': 0, 'w': 0, 'a': 0, 's': 0, 'd': 0, 'e': 0, 'q': 0, 'shift': 0, 'space': 0}, 'mouse': {'x': mouse_x, 'y': mouse_y}})
+
+        if self.shots_hit >= 25:
+            return frame, reward, True, False, info
+        else:
+            return frame, reward, False, False, info
+
+    def reset(self, seed=None):
+        screenshot_memory = shared_memory.SharedMemory(name='screenshot')
+        self.screenshot = np.ndarray(self.screen_shape, dtype=self.screen_dtype, buffer=screenshot_memory.buf)
+        screenshot_memory.close()
+
+        frame = self.screenshot[:]
+        frame = cv2.resize(frame, (self.screen_width, self.screen_height))
+        non_black_mask = np.any(frame != [0, 0, 0], axis=-1)
+        frame[non_black_mask] = [1, 1, 1]
+        frame = frame[:, :, 0]
+
+        return self.screenshot, None
+    
     def render(self, mode='human'):
         pass
 
@@ -149,7 +210,7 @@ class DeepwatchEnv(Env):
         for detection in self.detections:
             x1, y1 = int(detection[1]), int(detection[2])
             x2, y2 = int(detection[3]), int(detection[4])
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), -1)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), -1)
         return frame
 
     def test(self):
